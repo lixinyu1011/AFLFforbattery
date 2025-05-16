@@ -5,27 +5,23 @@ from sklearn.preprocessing import MinMaxScaler
 import joblib
 
 def data(args):
-
-    # 读取每个CSV文件并存储到列表中
+    # Read each CSV file and store them in a list
     dataframes = [pd.read_csv(f'../data_processed/{file}_LOESS.csv') for file in args.train_files]
-    # print(dataframes)
-    # 提取特征列
+
+    # Extract feature columns
     dataframes = [df.iloc[:, args.train_columns] for df in dataframes]
 
-    # print(dataframes)
-
-    # 按行拼接所有DataFrame
+    # Concatenate all DataFrames row-wise
     concatenated_df = pd.concat(dataframes, ignore_index=True).to_numpy()
-
     data = torch.tensor(concatenated_df[:, :].astype(np.float32))
-    # print(data)
 
-    # 实例化MinMaxScaler
+    # Instantiate MinMaxScaler
     scaler = MinMaxScaler()
 
-    # 拟合数据并转换
+    # Fit and transform the data
     scaler.fit_transform(data)
-    # 保存归一化对象到文件
+
+    # Save the fitted scaler object to file
     joblib.dump(scaler, 'scaler.joblib')
 
     X_all = []
@@ -34,13 +30,13 @@ def data(args):
         df = pd.read_csv(f'../data_processed/{file}_LOESS.csv')
 
         if file == args.val_data_path:
-            # 从指定的起点划分训练集
+            # For validation file, only use data before the start index
             data_file = torch.tensor(df.iloc[:args.start, args.train_columns].to_numpy().astype(np.float32))
         else:
-            # 使用整个文件划分训练集
+            # For training files, use the entire dataset
             data_file = torch.tensor(df.iloc[:, args.train_columns].to_numpy().astype(np.float32))
 
-        # 标准化数据
+        # Normalize data using the fitted scaler
         normalized_data = scaler.transform(data_file.numpy())
 
         collect_X = []
@@ -48,26 +44,21 @@ def data(args):
         for i in range(len(normalized_data) - args.seq - args.seq_out + 1):
             X_block = normalized_data[i:(i + args.seq), :]
             Y_block = normalized_data[(i + args.seq):(i + args.seq + args.seq_out), :]
-            collect_X.append(torch.tensor(X_block, dtype=torch.float32))  # 确保是Tensor
-            collect_Y.append(torch.tensor(Y_block, dtype=torch.float32))  # 确保是Tensor
+            collect_X.append(torch.tensor(X_block, dtype=torch.float32))
+            collect_Y.append(torch.tensor(Y_block, dtype=torch.float32))
 
         X_all.append(torch.stack(collect_X))
         Y_all.append(torch.stack(collect_Y))
 
-    # 将列表转换为tensor
-    X = torch.cat(X_all)  # 使用cat而不是stack，因为要一个大的Tensor
+    # Concatenate all sequence blocks into single tensors
+    X = torch.cat(X_all)
     Y = torch.cat(Y_all)
 
-    # 保存X和Y
+    # Save X and Y tensors
     torch.save(X, 'X_10.pt')
     torch.save(Y, 'Y_10.pt')
 
-    # 打印X和Y的形状
-    # print(f"X shape: {X.shape}, Y shape: {Y.shape}")
-
-    # 加载X和Y
+    # Load X and Y tensors
     X_loaded = torch.load('X_10.pt')
     Y_loaded = torch.load('Y_10.pt')
     return scaler, X_loaded, Y_loaded
-
-
